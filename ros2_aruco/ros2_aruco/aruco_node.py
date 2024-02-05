@@ -40,6 +40,9 @@ from geometry_msgs.msg import PoseArray, Pose
 from ros2_aruco_interfaces.msg import ArucoMarkers
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
+import tf2_ros
+from geometry_msgs.msg import TransformStamped
+
 
 class ArucoNode(rclpy.node.Node):
     def __init__(self):
@@ -148,6 +151,9 @@ class ArucoNode(rclpy.node.Node):
         self.aruco_dictionary = cv2.aruco.Dictionary_get(dictionary_id)
         self.aruco_parameters = cv2.aruco.DetectorParameters_create()
         self.bridge = CvBridge()
+        
+        self.tf_broadcaster = tf2_ros.StaticTransformBroadcaster(self)
+
 
     def info_callback(self, info_msg):
         self.info_msg = info_msg
@@ -204,6 +210,18 @@ class ArucoNode(rclpy.node.Node):
                 pose_array.poses.append(pose)
                 markers.poses.append(pose)
                 markers.marker_ids.append(marker_id[0])
+                
+                # Broadcast the transformation between camera and Aruco marker
+                transform_stamped = TransformStamped()
+                transform_stamped.header.stamp = img_msg.header.stamp
+                transform_stamped.header.frame_id = self.info_msg.header.frame_id  # Camera frame
+                transform_stamped.child_frame_id = f"aruco_marker_{marker_id[0]}"
+                transform_stamped.transform.translation.x = pose.position.x
+                transform_stamped.transform.translation.y = pose.position.y
+                transform_stamped.transform.translation.z = pose.position.z
+                transform_stamped.transform.rotation = pose.orientation
+
+            self.tf_broadcaster.sendTransform(transform_stamped)
 
             self.poses_pub.publish(pose_array)
             self.markers_pub.publish(markers)
